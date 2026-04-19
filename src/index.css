@@ -11,3 +11,10 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+.nav div:hover .tooltip-text {
+  opacity: 1;
+  transition: 0.3s;
+}
+.nav a {
+  color: rgb(226, 229, 239) !important;
+}
