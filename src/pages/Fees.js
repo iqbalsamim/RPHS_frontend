@@ -35,6 +35,8 @@ function Fees() {
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
   const [selectedYear, setSelectedYear] = useState(getCurrentShamsiYear());
+  const [selectedStatus, setSelectedStatus] = useState("All");
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const [studentSearch, setStudentSearch] = useState("");
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -127,7 +129,6 @@ function Fees() {
       return;
     }
 
-    // Check if fee already exists
     const exists = await checkExistingFee(newFee.student_id, newFee.month, newFee.year);
     if (exists) {
       alert(`Fee already exists for ${newFee.month} ${newFee.year}`);
@@ -135,7 +136,7 @@ function Fees() {
     }
 
     try {
-      const res = await API.post("/fees", {
+      await API.post("/fees", {
         student_id: newFee.student_id,
         total_amount: newFee.total_amount,
         paid_amount: newFee.pay_amount || 0,
@@ -209,151 +210,506 @@ function Fees() {
     }
   };
 
-  // RECEIPT
- // RECEIPT - Simplified version without Persian text issues
-const generateReceipt = async (fee) => {
-  const doc = new jsPDF("p", "mm", "a4");
-  
-  const invoiceNo = `INV-${fee.year}-${fee.month_num}
-  `;
-  const today = new Date().toLocaleDateString();
-  
-  const img = new Image();
-  img.src = logo;
-  
-  await new Promise((resolve) => {
-    img.onload = () => resolve();
-  });
-  
-  // Watermark
-  doc.setGState(new doc.GState({ opacity: 0.05 }));
-  doc.addImage(img, "PNG", 40, 90, 130, 130);
-  doc.setGState(new doc.GState({ opacity: 1 }));
-  
-  // Header
-  doc.addImage(img, "PNG", 15, 10, 25, 25);
-  
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text("Rashad Private High School", 105, 18, { align: "center"});
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  doc.text("Gardez City, Paktia, Afghanistan", 105, 24, { align: "center" });
-  doc.text("Phone: 0777557721", 105, 29, { align: "center" });
-  
-  doc.line(15, 38, 195, 38);
-  
-  // Invoice Meta
-  doc.setFontSize(11);
-  doc.text(`Invoice No: ${invoiceNo}`, 15, 50);
-  doc.text(`Date: ${today}`, 150, 50);
-  
-  // Student Info
-  doc.rect(15, 55, 180, 35);
-  
-  doc.setFont("helvetica", "bold");
-  doc.text("Student Information", 17, 63);
-  
-  doc.setFont("helvetica", "normal");
-  
-  // Use English month names or numbers to avoid encoding issues
-  const monthMap = {
-    "حمل": "Hamal (1)",
-    "ثور": "Saur (2)",
-    "جوزا": "Jawza (3)",
-    "سرطان": "Saratan (4)",
-    "اسد": "Asad (5)",
-    "سنبله": "Sunbula (6)",
-    "میزان": "Mizan (7)",
-    "عقرب": "Aqrab (8)",
-    "قوس": "Qaws (9)",
-    "جدی": "Jady (10)",
-    "دلو": "Dalw (11)",
-    "حوت": "Hut (12)"
+  // SINGLE RECEIPT
+    // SINGLE RECEIPT - Centered on page
+  const generateReceipt = async (fee) => {
+    const doc = new jsPDF("p", "mm", "a4");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const centerX = pageWidth / 2;
+    
+    // Calculate width for centered content (use 160mm width for better appearance)
+    const contentWidth = 160;
+    const startX = (pageWidth - contentWidth) / 2;
+    const startY = 20; // Top margin
+    
+    const invoiceNo = `INV-${fee.year}-${fee.month_num}`;
+    const today = new Date().toLocaleDateString();
+    
+    const img = new Image();
+    img.src = logo;
+    
+    await new Promise((resolve) => {
+      img.onload = () => resolve();
+    });
+    
+    // Light watermark
+    doc.setGState(new doc.GState({ opacity: 0.08 }));
+    doc.addImage(img, "PNG", centerX - 40, startY + 40, 80, 80);
+    doc.setGState(new doc.GState({ opacity: 1 }));
+    
+    // Logo (centered at top)
+    doc.addImage(img, "PNG", centerX - 10, startY, 20, 20);
+    
+    // Header - Centered
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Rashad Private High School", centerX, startY + 28, { align: "center" });
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("Gardez City, Paktia, Afghanistan", centerX, startY + 35, { align: "center" });
+    doc.text("Phone: 0777557721", centerX, startY + 40, { align: "center" });
+    
+    // Divider
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.5);
+    doc.line(startX, startY + 46, startX + contentWidth, startY + 46);
+    
+    // Invoice Info
+    doc.setFontSize(11);
+    doc.text(`Invoice No: ${invoiceNo}`, startX, startY + 56);
+    doc.text(`Date: ${today}`, startX + 120, startY + 56);
+    
+    // Student Info Box - Centered
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.rect(startX, startY + 62, contentWidth, 32);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Student Information", startX + 5, startY + 72);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    
+    const monthMap = {
+      "حمل": "Hamal",
+      "ثور": "Saur",
+      "جوزا": "Jawza",
+      "سرطان": "Saratan",
+      "اسد": "Asad",
+      "سنبله": "Sunbula",
+      "میزان": "Mizan",
+      "عقرب": "Aqrab",
+      "قوس": "Qaws",
+      "جدی": "Jady",
+      "دلو": "Dalw",
+      "حوت": "Hut"
+    };
+    
+    const englishMonth = monthMap[fee.month] || fee.month || `Month ${fee.month_num || ''}`;
+    doc.text(`Student ID: ${fee.student_id || "N/A"}`, startX + 5, startY + 80);
+    doc.text(`Name: ${fee.name || "Unknown Student"}`, startX + 5, startY + 85);
+    doc.text(`Period: ${englishMonth} ${fee.year}`, startX + 5, startY + 90);
+    
+    // Amounts Table
+    let currentY = startY + 98;
+    
+    // Table Header
+    doc.setFillColor(230, 230, 230);
+    doc.rect(startX, currentY, contentWidth, 8, "F");
+    doc.rect(startX, currentY, contentWidth, 8);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Description", startX + 5, currentY + 6);
+    doc.text("Amount(AFN)", startX + 125, currentY + 6);
+    
+    currentY += 8;
+    
+    // Table Body
+    doc.setFont("helvetica", "normal");
+    doc.rect(startX, currentY, contentWidth, 36);
+    
+    doc.text(`Monthly Fee (${englishMonth} ${fee.year})`, startX + 5, currentY + 8);
+    doc.text(`${fee.total_amount || 0}`, startX + 150, currentY + 8, { align: "right" });
+    
+    // Divider
+    doc.setDrawColor(200, 200, 200);
+    doc.line(startX, currentY + 14, startX + contentWidth, currentY + 14);
+    doc.setDrawColor(0, 0, 0);
+    
+    doc.text("Paid Amount", startX + 5, currentY + 20);
+    doc.text(`${fee.paid_amount || 0}`, startX + 150, currentY + 20, { align: "right" });
+    
+    doc.text("Due Amount", startX + 5, currentY + 30);
+    doc.text(`${fee.due_amount || 0}`, startX + 150, currentY + 30, { align: "right" });
+    
+    currentY += 36;
+    
+    // Status
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    
+    let statusColor = [0, 0, 0];
+    let statusText = "";
+    if (fee.status === "Paid") {
+      statusText = " STATUS: PAID";
+      statusColor = [0, 150, 0];
+    } else if (fee.status === "Partial") {
+      statusText = "STATUS: PARTIAL";
+      statusColor = [255, 165, 0];
+    } else {
+      statusText = " STATUS: UNPAID";
+      statusColor = [255, 0, 0];
+    }
+    
+    doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
+    doc.text(statusText, centerX, currentY + 8, { align: "center" });
+    doc.setTextColor(0, 0, 0);
+    
+    // QR Code (centered)
+    const qr = await QRCode.toDataURL(invoiceNo);
+    doc.addImage(qr, "PNG", centerX - 20, currentY + 15, 40, 40);
+    
+    // Signature Section
+    currentY += 65;
+    
+    doc.setDrawColor(0, 0, 0);
+    doc.line(startX, currentY, startX + 70, currentY);
+    doc.text("Authorized Signature", startX, currentY + 6);
+    
+    doc.line(startX + contentWidth - 70, currentY, startX + contentWidth, currentY);
+    doc.text("Accountant", startX + contentWidth - 70, currentY + 6);
+    
+    // Footer
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "italic");
+    doc.text(
+      "This is a computer generated invoice. No signature required.",
+      centerX,
+      currentY + 20,
+      { align: "center" }
+    );
+    
+    // Save with safe filename
+    const safeName = (fee.name || "student").replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    doc.save(`invoice_${safeName}_${fee.month_num || fee.month}_${fee.year}.pdf`);
   };
+
+  // Helper function to add a single receipt to PDF document
+  const addReceiptToDoc = async (doc, fee, startY, isFullPage = false) => {
+    const invoiceNo = `INV-${fee.year}-${fee.month_num}`;
+    const today = new Date().toLocaleDateString();
+    
+    const img = new Image();
+    img.src = logo;
+    
+    await new Promise((resolve) => {
+      img.onload = () => resolve();
+    });
+    
+    const y = startY;
+    
+    // Small receipt format for batch printing (scaled down)
+    const isBatch = !isFullPage;
+    const scale = isBatch ? 0.48 : 1;
+    const xOffset = isBatch ? (startY % 2 === 0 ? 15 : 105) : 15;
+    const yOffset = y;
+    
+    // Watermark (smaller for batch)
+    doc.setGState(new doc.GState({ opacity: 0.05 }));
+    doc.addImage(img, "PNG", xOffset + 25, yOffset + 45, 65, 65);
+    doc.setGState(new doc.GState({ opacity: 1 }));
+    
+    // Header
+    doc.addImage(img, "PNG", xOffset, yOffset + 5, 12, 12);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(isBatch ? 10 : 18);
+    doc.text("Rashad Private High School", xOffset + 45, yOffset + 9, { align: "center"});
+    doc.setFontSize(isBatch ? 6 : 10);
+    doc.setFont("helvetica", "normal");
+    doc.text("Gardez City, Paktia, Afghanistan", xOffset + 45, yOffset + 13, { align: "center" });
+    doc.text("Phone: 0777557721", xOffset + 45, yOffset + 16, { align: "center" });
+    
+    doc.line(xOffset, yOffset + 20, xOffset + 90, yOffset + 20);
+    
+    // Invoice Meta
+    doc.setFontSize(isBatch ? 7 : 11);
+    doc.text(`Invoice No: ${invoiceNo}`, xOffset, yOffset + 27);
+    doc.text(`Date: ${today}`, xOffset + 60, yOffset + 27);
+    
+    // Student Info
+    doc.rect(xOffset, yOffset + 30, 90, 18);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Student Info", xOffset + 2, yOffset + 35);
+    
+    doc.setFont("helvetica", "normal");
+    
+    const monthMap = {
+      "حمل": "Hamal",
+      "ثور": "Saur",
+      "جوزا": "Jawza",
+      "سرطان": "Saratan",
+      "اسد": "Asad",
+      "سنبله": "Sunbula",
+      "میزان": "Mizan",
+      "عقرب": "Aqrab",
+      "قوس": "Qaws",
+      "جدی": "Jady",
+      "دلو": "Dalw",
+      "حوت": "Hut"
+    };
+    
+    const englishMonth = monthMap[fee.month] || fee.month || `Month ${fee.month_num || ''}`;
+    const monthYearText = `${englishMonth} ${fee.year}`;
+    
+    doc.text(`Name: ${(fee.name || "Unknown Student").substring(0, 20)}`, xOffset + 2, yOffset + 40);
+    doc.text(`ID: ${fee.student_id || "N/A"}`, xOffset + 50, yOffset + 40);
+    doc.text(`Period: ${monthYearText}`, xOffset + 2, yOffset + 45);
+    
+    // Table
+    doc.setFillColor(230, 230, 230);
+    doc.rect(xOffset, yOffset + 50, 90, 5, "F");
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(isBatch ? 6 : 10);
+    doc.text("Description", xOffset + 2, yOffset + 54);
+    doc.text("Amount", xOffset + 75, yOffset + 54);
+    
+    doc.setFont("helvetica", "normal");
+    doc.rect(xOffset, yOffset + 55, 90, 22);
+    
+    doc.text(`Monthly Fee (${englishMonth})`, xOffset + 2, yOffset + 61);
+    doc.text(`${fee.total_amount || 0}`, xOffset + 78, yOffset + 61);
+    
+    doc.text("Paid Amount", xOffset + 2, yOffset + 66);
+    doc.text(`${fee.paid_amount || 0}`, xOffset + 78, yOffset + 66);
+    
+    doc.text("Due Amount", xOffset + 2, yOffset + 71);
+    doc.text(`${fee.due_amount || 0}`, xOffset + 78, yOffset + 71);
+    
+    // Status
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(isBatch ? 7 : 12);
+    
+    let statusText = "";
+    let statusColor = [0, 0, 0];
+    if (fee.status === "Paid") {
+      statusText = "PAID";
+      statusColor = [0, 150, 0];
+    } else if (fee.status === "Partial") {
+      statusText = "PARTIAL";
+      statusColor = [255, 165, 0];
+    } else {
+      statusText = "UNPAID";
+      statusColor = [255, 0, 0];
+    }
+    
+    doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
+    doc.text(`Status: ${statusText}`, xOffset + 2, yOffset + 82);
+    doc.setTextColor(0, 0, 0);
+    
+    // QR Code (smaller for batch)
+    const qrSize = isBatch ? 20 : 40;
+    const qr = await QRCode.toDataURL(invoiceNo);
+    doc.addImage(qr, "PNG", xOffset + 65, yOffset + 78, qrSize, qrSize);
+    
+    // Signature (only for full page)
+    if (!isBatch) {
+      doc.line(xOffset, yOffset + 130, xOffset + 35, yOffset + 130);
+      doc.text("Authorized Signature", xOffset, yOffset + 137);
+      
+      doc.line(xOffset + 55, yOffset + 130, xOffset + 90, yOffset + 130);
+      doc.text("Accountant", xOffset + 55, yOffset + 137);
+    }
+    
+    // Footer for batch
+    if (isBatch) {
+      doc.setFontSize(5);
+      doc.setFont("helvetica", "italic");
+      doc.text("Computer generated invoice", xOffset + 45, yOffset + 143, { align: "center" });
+    }
+  };
+
+  // BATCH PRINT - Print multiple invoices on one page (4 per page)
+   // BATCH PRINT - Print multiple invoices on one page (4 per page)
+   // BATCH PRINT - Print multiple invoices on one page (4 per page, no QR code)
+  const batchPrintInvoices = async () => {
+    if (filteredFees.length === 0) {
+      alert("No fees to print");
+      return;
+    }
+
+    setIsPrinting(true);
+    
+    try {
+      const doc = new jsPDF("p", "mm", "a4");
+      
+      // Define 4 positions on the page (2 columns x 2 rows)
+      // With proper padding from top and bottom
+      const positions = [
+        { x: 15, y: 15 },   // Position 1: Top-Left
+        { x: 110, y: 15 },  // Position 2: Top-Right
+        { x: 15, y: 155 },  // Position 3: Bottom-Left
+        { x: 110, y: 155 }  // Position 4: Bottom-Right
+      ];
+      
+      for (let i = 0; i < filteredFees.length; i++) {
+        const fee = filteredFees[i];
+        const positionIndex = i % 4;
+        
+        // Add new page for every 4 invoices (except first page)
+        if (i > 0 && positionIndex === 0) {
+          doc.addPage();
+        }
+        
+        const pos = positions[positionIndex];
+        await addCompactReceiptToDoc(doc, fee, pos.x, pos.y);
+        
+        // Small delay to prevent rate limiting
+        await new Promise(resolve => setTimeout(resolve, 30));
+      }
+      
+      const fileName = `invoices_${selectedYear}_${selectedStatus}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.pdf`;
+      doc.save(fileName);
+      
+    } catch (err) {
+      console.error("Error printing batch invoices:", err);
+      alert("Error generating batch invoices: " + err.message);
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
+  // Helper function for compact receipt (4 per page, no QR code)
+   // Helper function for compact receipt (4 per page, no QR code, with solid border)
+  const addCompactReceiptToDoc = async (doc, fee, startX, startY) => {
+    const invoiceNo = `INV-${fee.year}-${fee.month_num}`;
+    const today = new Date().toLocaleDateString();
+    
+    const img = new Image();
+    img.src = logo;
+    
+    await new Promise((resolve) => {
+      img.onload = () => resolve();
+    });
+    
+    // Draw SOLID BORDER around the entire invoice
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.rect(startX, startY, 90, 80);
+    
+    // Light watermark inside border
+    doc.setGState(new doc.GState({ opacity: 0.06 }));
+    doc.addImage(img, "PNG", startX + 20, startY + 25, 50, 50);
+    doc.setGState(new doc.GState({ opacity: 1 }));
+    
+    // Small Logo
+    doc.addImage(img, "PNG", startX + 2, startY + 2, 8, 8);
+    
+    // Header
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("Rashad High School", startX + 45, startY + 6, { align: "center" });
+    doc.setFontSize(5);
+    doc.setFont("helvetica", "normal");
+    doc.text("Gardez City, Paktia", startX + 45, startY + 9.5, { align: "center" });
+    doc.text("Phone: 0777557721", startX + 45, startY + 12.5, { align: "center" });
+    
+    // Inner divider line
+    doc.setDrawColor(200, 200, 200);
+    doc.line(startX + 2, startY + 14.5, startX + 88, startY + 14.5);
+    
+    // Invoice Info
+    doc.setFontSize(5.5);
+    doc.text(invoiceNo, startX + 2, startY + 19.5);
+    doc.text(today, startX + 65, startY + 19.5);
+    
+    // Student Info Box (with border)
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.3);
+    doc.rect(startX + 2, startY + 22, 86, 14);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(5.5);
+    doc.text("Student Info", startX + 4, startY + 26);
+    
+    doc.setFont("helvetica", "normal");
+    
+    const monthMap = {
+      "حمل": "Hamal",
+      "ثور": "Saur",
+      "جوزا": "Jawza",
+      "سرطان": "Saratan",
+      "اسد": "Asad",
+      "سنبله": "Sunbula",
+      "میزان": "Mizan",
+      "عقرب": "Aqrab",
+      "قوس": "Qaws",
+      "جدی": "Jady",
+      "دلو": "Dalw",
+      "حوت": "Hut"
+    };
+    
+    const englishMonth = monthMap[fee.month] || fee.month || `M${fee.month_num || ''}`;
+    const studentName = (fee.name || "Unknown Student").substring(0, 16);
+    
+    doc.text(`First Name: ${studentName}`, startX + 4, startY + 30.5);
+    doc.text(`ID: ${fee.student_id || "N/A"}`, startX + 4, startY + 28.5);
+    doc.text(`Period: ${englishMonth} ${fee.year}`, startX + 4, startY + 34);
+    
+    // Amounts Table
+    let currentY = startY + 38;
+    
+    // Table Header (with border)
+    doc.setFillColor(230, 230, 230);
+    doc.rect(startX + 2, currentY, 86, 4.5, "F");
+    doc.setDrawColor(200, 200, 200);
+    doc.rect(startX + 2, currentY, 86, 4.5);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(5);
+    doc.text("Description", startX + 4, currentY + 3);
+    doc.text("AFN", startX + 84, currentY + 3);
+    
+    currentY += 4.5;
+    
+    // Table Body (with border)
+    doc.setFont("helvetica", "normal");
+    doc.rect(startX + 2, currentY, 86, 15);
+    
+    doc.text("Total Fee", startX + 4, currentY + 4);
+    doc.text(`${fee.total_amount || 0}`, startX + 84, currentY + 4, { align: "right" });
+    
+    // Inner divider line in table
+    doc.setDrawColor(200, 200, 200);
+    doc.line(startX + 2, currentY + 7.5, startX + 88, currentY + 7.5);
   
-  const englishMonth = monthMap[fee.month] || fee.month || `Month ${fee.month_num || ''}`;
-  const monthYearText = `${englishMonth} - ${fee.year}`;
+    doc.text("Paid Amount", startX + 4, currentY + 8.5);
+    doc.text(`${fee.paid_amount || 0}`, startX + 84, currentY + 8.5, { align: "right" });
+   
+    doc.text("Due Amount", startX + 4, currentY + 13);
+    doc.text(`${fee.due_amount || 0}`, startX + 84, currentY + 13, { align: "right" });
+    
+    currentY += 15;
+    
+    // Status
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    
+    let statusColor = [0, 0, 0];
+    let statusText = "";
+    if (fee.status === "Paid") {
+      statusText = "PAID";
+      statusColor = [0, 150, 0];
+    } else if (fee.status === "Partial") {
+      statusText = " PARTIAL";
+      statusColor = [255, 165, 0];
+    } else {
+      statusText = "UNPAID";
+      statusColor = [255, 0, 0];
+    }
+    
+    doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
+    doc.text(statusText, startX + 4, currentY + 3);
+    doc.setTextColor(0, 0, 0);
+    
+    // Footer
+    doc.setFontSize(4);
+    doc.setFont("helvetica", "italic");
+    doc.text("System generated invoice No need to sign", startX + 45, currentY + 11, { align: "center" });
+  };
+
   
-  doc.text(`Name: ${fee.name || "Unknown Student"}`, 17, 72);
-  doc.text(`Student ID: ${fee.student_id || "N/A"}`, 17, 80);
-  doc.text(`Period: ${monthYearText}`, 17, 88);
-  
-  // Table Header
-  doc.setFillColor(230, 230, 230);
-  doc.rect(15, 100, 180, 10, "F");
-  
-  doc.setFont("helvetica", "bold");
-  doc.text("Description", 20, 107);
-  doc.text("Amount (AFN)", 160, 107);
-  
-  // Table Body
-  doc.setFont("helvetica", "normal");
-  doc.rect(15, 110, 180, 45);
-  
-  doc.text(`Monthly Fee (${englishMonth} ${fee.year})`, 20, 120);
-  doc.text(`${fee.total_amount || 0}`, 165, 120);
-  
-  doc.text("Paid Amount", 20, 130);
-  doc.text(`${fee.paid_amount || 0}`, 165, 130);
-  
-  doc.text("Due Amount", 20, 140);
-  doc.text(`${fee.due_amount || 0}`, 165, 140);
-  
-  // Status
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  
-  let statusText = "Status: ";
-  let statusColor = [0, 0, 0];
-  if (fee.status === "Paid") {
-    statusText += "PAID";
-    statusColor = [0, 150, 0];
-  } else if (fee.status === "Partial") {
-    statusText += "PARTIAL";
-    statusColor = [255, 165, 0];
-  } else {
-    statusText += "UNPAID";
-    statusColor = [255, 0, 0];
-  }
-  
-  doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
-  doc.text(statusText, 15, 165);
-  doc.setTextColor(0, 0, 0);
-  
-  // QR Code
-  const qr = await QRCode.toDataURL(invoiceNo);
-  doc.addImage(qr, "PNG", 150, 160, 40, 40);
-  
-  // Total Box
-  doc.rect(120, 210, 75, 30);
-  
-  doc.setFontSize(11);
-  doc.text(`Total: ${fee.total_amount || 0} AFN`, 125, 220);
-  doc.text(`Paid: ${fee.paid_amount || 0} AFN`, 125, 228);
-  doc.text(`Due: ${fee.due_amount || 0} AFN`, 125, 236);
-  
-  // Signature
-  doc.line(15, 260, 80, 260);
-  doc.text("Authorized Signature", 15, 267);
-  
-  doc.line(120, 260, 195, 260);
-  doc.text("Accountant", 120, 267);
-  
-  // Footer
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "italic");
-  doc.text(
-    "This is a computer generated invoice. No signature required.",
-    105,
-    285,
-    { align: "center" }
-  );
-  
-  // Save with safe filename
-  const safeName = (fee.name || "student").replace(/[^a-z0-9]/gi, '_').toLowerCase();
-  doc.save(`invoice_${safeName}_${fee.month_num || fee.month}_${fee.year}.pdf`);
-};
+
+  // Filter fees by year and status
+  const filteredFees = fees.filter(f => {
+    if (f.year !== selectedYear) return false;
+    if (selectedStatus !== "All" && f.status !== selectedStatus) return false;
+    return true;
+  });
 
   const filteredStudents = students.filter((s) => {
     if (!studentSearch) return true;
@@ -368,6 +724,42 @@ const generateReceipt = async (fee) => {
     availableYears.push(i.toString());
   }
 
+  // Status options for filter
+  const statusOptions = [
+    { value: "All", label: "All Status", color: "secondary" },
+    { value: "Paid", label: "Paid", color: "success" },
+    { value: "Partial", label: "Partial", color: "warning" },
+    { value: "Unpaid", label: "Unpaid", color: "danger" }
+  ];
+
+  // Calculate summary statistics
+  const getSummaryStats = () => {
+    const stats = {
+      total: 0,
+      paid: 0,
+      partial: 0,
+      unpaid: 0,
+      totalAmount: 0,
+      totalPaid: 0,
+      totalDue: 0
+    };
+
+    filteredFees.forEach(fee => {
+      stats.total++;
+      stats.totalAmount += fee.total_amount || 0;
+      stats.totalPaid += fee.paid_amount || 0;
+      stats.totalDue += fee.due_amount || 0;
+      
+      if (fee.status === "Paid") stats.paid++;
+      else if (fee.status === "Partial") stats.partial++;
+      else if (fee.status === "Unpaid") stats.unpaid++;
+    });
+
+    return stats;
+  };
+
+  const stats = getSummaryStats();
+
   return (
     <div>
       <Navbar />
@@ -375,18 +767,94 @@ const generateReceipt = async (fee) => {
       <div className="container mt-4">
         <h3>Fees Management</h3>
 
-        {/* Year Filter */}
-        <div className="mb-3">
-          <label className="form-label">Select Year:</label>
-          <select 
-            className="form-select w-auto"
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(e.target.value)}
-          >
-            {availableYears.map(year => (
-              <option key={year} value={year}>{year}</option>
-            ))}
-          </select>
+        {/* Filter Section */}
+        <div className="card p-3 mb-3">
+          <div className="row align-items-end">
+            <div className="col-md-3 mb-2">
+              <label className="form-label">Select Year:</label>
+              <select 
+                className="form-select"
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+              >
+                {availableYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-md-3 mb-2">
+              <label className="form-label">Filter by Status:</label>
+              <select 
+                className="form-select"
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+              >
+                {statusOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-md-6 mb-2">
+              <label className="form-label">Quick Stats:</label>
+              <div className="d-flex gap-2 flex-wrap">
+                <span className="badge bg-success">Paid: {stats.paid}</span>
+                <span className="badge bg-warning">Partial: {stats.partial}</span>
+                <span className="badge bg-danger">Unpaid: {stats.unpaid}</span>
+                <span className="badge bg-secondary">Total: {stats.total}</span>
+                {filteredFees.length > 0 && (
+                  <button 
+                    className="btn btn-sm btn-primary ms-2"
+                    onClick={batchPrintInvoices}
+                    disabled={isPrinting}
+                  >
+                    {isPrinting ? "Printing..." : "🖨️ Print All Invoices"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Summary Cards */}
+          <div className="row mt-3">
+            <div className="col-md-4">
+              <div className="card bg-light">
+                <div className="card-body text-center">
+                  <h6>Total Amount</h6>
+                  <h4 className="text-primary">{stats.totalAmount.toLocaleString()} AFN</h4>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-4">
+              <div className="card bg-light">
+                <div className="card-body text-center">
+                  <h6>Total Paid</h6>
+                  <h4 className="text-success">{stats.totalPaid.toLocaleString()} AFN</h4>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-4">
+              <div className="card bg-light">
+                <div className="card-body text-center">
+                  <h6>Total Due</h6>
+                  <h4 className="text-danger">{stats.totalDue.toLocaleString()} AFN</h4>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Print Info */}
+          {filteredFees.length > 0 && !isPrinting && (
+            <div className="alert alert-info mt-3 mb-0">
+              <small>
+                <strong>📄 Print Ready:</strong> {filteredFees.length} invoice(s) ready to print. 
+                Will print {Math.ceil(filteredFees.length / 4)} page(s) with 4 invoices per page.
+              </small>
+            </div>
+          )}
         </div>
 
         {/* TYPEAHEAD SEARCH */}
@@ -427,8 +895,8 @@ const generateReceipt = async (fee) => {
             <table className="table table-sm">
               <thead>
                 <tr>
-                  <th>Month </th>
-                  <th>Year </th>
+                  <th>Month</th>
+                  <th>Year</th>
                   <th>Total</th>
                   <th>Paid</th>
                   <th>Due</th>
@@ -454,12 +922,12 @@ const generateReceipt = async (fee) => {
 
         {/* ADD FEE FORM */}
         <form onSubmit={createFee} className="card p-3 mb-3">
-          <h5>Add Fee Record </h5>
+          <h5>Add Fee Record</h5>
 
           <div className="alert alert-info p-2">
             <strong>Student:</strong> {selectedStudent ? getStudentFullName(selectedStudent) : "Not selected"}
             <br />
-            <strong>Class :</strong> {selectedStudent?.class_name || "N/A"}
+            <strong>Class:</strong> {selectedStudent?.class_name || "N/A"}
           </div>
 
           <div className="row">
@@ -506,7 +974,7 @@ const generateReceipt = async (fee) => {
               <input
                 className="form-control"
                 type="number"
-                placeholder="Total Amount "
+                placeholder="Total Amount"
                 value={newFee.total_amount}
                 onChange={(e) =>
                   setNewFee({ ...newFee, total_amount: e.target.value })
@@ -516,11 +984,11 @@ const generateReceipt = async (fee) => {
             </div>
 
             <div className="col-md-6 mb-2">
-              <label className="form-label">Pay Amount (Optional) </label>
+              <label className="form-label">Pay Amount (Optional):</label>
               <input
                 className="form-control"
                 type="number"
-                placeholder="Pay Amount "
+                placeholder="Pay Amount"
                 value={newFee.pay_amount}
                 onChange={(e) =>
                   setNewFee({ ...newFee, pay_amount: e.target.value })
@@ -555,12 +1023,14 @@ const generateReceipt = async (fee) => {
             </thead>
 
             <tbody>
-              {fees.filter(f => f.year === selectedYear).length === 0 ? (
+              {filteredFees.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="text-center">No fee records found for {selectedYear}</td>
+                  <td colSpan="8" className="text-center">
+                    No fee records found for {selectedYear} {selectedStatus !== "All" ? `with status "${selectedStatus}"` : ""}
+                  </td>
                 </tr>
               ) : (
-                fees.filter(f => f.year === selectedYear).map((f) => (
+                filteredFees.map((f) => (
                   <tr key={f.id}>
                     <td>{f.name || "Unknown Student"}</td>
                     <td>{f.month || "-"}</td>
@@ -660,7 +1130,7 @@ const generateReceipt = async (fee) => {
                   ))}
                 </select>
 
-                <label>Additional Payment</label>
+                <label>Additional Payment:</label>
                 <input
                   type="number"
                   className="form-control mb-2"
